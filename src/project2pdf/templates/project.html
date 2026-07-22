@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { font-family: "Segoe UI", Arial, sans-serif; color: {{ palette.text }}; background: {{ palette.background }}; font-size: 10.5pt; line-height: 1.42; }
+  body { margin: 0; }
+  a { color: {{ palette.accent }}; text-decoration: none; }
+  .brand { color: {{ palette.accent }}; font-size: 11pt; font-weight: 700; letter-spacing: 1px; margin-bottom: 16px; }
+  .hero-table { width: 100%; border-collapse: collapse; margin-bottom: 22px; }
+  .hero-table td { vertical-align: top; }
+  .hero-image { padding-right: 18px; }
+  h1 { font-size: 24pt; line-height: 1.08; margin: 0 0 8px; color: {{ palette.heading }}; }
+  p { margin: 0 0 9px; }
+  .creator { font-size: 11pt; font-weight: 600; margin: 8px 0 15px; }
+  .button { display: block; background: {{ palette.accent }}; color: {{ palette.button_text }}; padding: 11px 15px; text-align: center; font-weight: 700; margin: 14px 0 8px; }
+  .muted { color: {{ palette.muted }}; font-size: 8.5pt; }
+  .section { width: 100%; background: {{ palette.surface }}; border: 1px solid {{ palette.border }}; border-collapse: collapse; margin: 0 0 14px; page-break-inside: avoid; }
+  .section-cell { padding: 12px 14px 13px; }
+  .section-title { color: {{ palette.heading }}; font-size: 16pt; font-weight: 700; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 2px solid {{ palette.border }}; page-break-after: avoid; }
+  .facts { width: 100%; border-collapse: collapse; margin: 8px 0 12px; }
+  .facts td { padding: 6px 8px; border-bottom: 1px solid {{ palette.border }}; }
+  .facts td:first-child { width: 34%; color: {{ palette.muted }}; font-weight: 600; }
+  .file-grid { width: 100%; border-collapse: collapse; }
+  .file-grid td { width: 50%; border-bottom: 1px solid {{ palette.border }}; padding: 7px 8px; font-weight: 600; }
+  .gallery { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .gallery td { width: 33%; padding: 5px; vertical-align: top; }
+  .section-new-page { page-break-before: always; }
+  .gallery-section { page-break-before: always; }
+  .license { padding: 12px; border-left: 5px solid {{ palette.accent }}; background: {{ palette.soft }}; }
+</style>
+</head>
+<body>
+  <div class="brand">PROJECT2PDF</div>
+  <table class="hero-table">
+    <tr>
+      {% if hero %}<td class="hero-image" width="48%"><img src="{{ hero }}" width="290"></td>{% endif %}
+      <td class="hero-copy" width="52%">
+        <h1>{{ project.display_name }}</h1>
+        {% if project.creator %}
+          <div class="creator">
+            {% if project.creator_url %}<a href="{{ project.creator_url }}">{{ project.creator }}</a>{% else %}{{ project.creator }}{% endif %}
+          </div>
+        {% endif %}
+        {% if project.source_url %}<a class="button" href="{{ project.source_url }}">VIEW ORIGINAL ON {{ project.site|upper }}</a>{% endif %}
+        <div class="muted">
+          {% if project.updated %}updated {{ project.updated|friendly_date }}{% endif %}
+          {% if project.published %}{% if project.updated %} &nbsp;|&nbsp; {% endif %}published {{ project.published|friendly_date }}{% endif %}
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  {% if project.description %}
+    <table class="section" width="100%"><tr><td class="section-cell"><div class="section-title">Summary</div>{{ project.description|nl2br }}</td></tr></table>
+  {% endif %}
+
+  {% if project.print_instructions or print_settings or dimensions %}
+    <table class="section{% if print_section_new_page %} section-new-page{% endif %}" width="100%"><tr><td class="section-cell">
+        <div class="section-title">Print details</div>
+        {% if project.print_instructions %}{{ project.print_instructions|nl2br }}{% endif %}
+        <table class="facts">
+          {% if dimensions %}<tr><td>Model dimensions</td><td>{{ dimensions }}</td></tr>{% endif %}
+          {% for key, value in print_settings.items() %}<tr><td>{{ key }}</td><td>{{ value }}</td></tr>{% endfor %}
+        </table>
+    </td></tr></table>
+  {% endif %}
+
+  {% if project.model_files or project.source_files %}
+    <table class="section{% if model_section_new_page %} section-new-page{% endif %}" width="100%"><tr><td class="section-cell">
+        <div class="section-title">Model files</div>
+        <table class="file-grid">
+          {% for file in display_model_files %}
+            {% if loop.index0 is even %}<tr>{% endif %}
+            <td>{{ file }}</td>
+            {% if loop.index0 is odd or loop.last %}</tr>{% endif %}
+          {% endfor %}
+        </table>
+    </td></tr></table>
+  {% endif %}
+
+  {% if project.license_name or project.license_url %}
+    <table class="section{% if license_section_new_page %} section-new-page{% endif %}" width="100%"><tr><td class="section-cell">
+        <div class="section-title">License</div>
+        <div class="license">
+          {% if project.license_url %}<a href="{{ project.license_url }}"><strong>{{ project.license_name or project.license_url }}</strong></a>
+          {% else %}<strong>{{ project.license_name }}</strong>{% endif %}
+        </div>
+    </td></tr></table>
+  {% endif %}
+
+  {% if gallery %}
+    <table class="section gallery-section" width="100%"><tr><td class="section-cell">
+        <div class="section-title">Project images</div>
+        <table class="gallery">
+          {% for image in gallery %}
+            {% if loop.index0 % 3 == 0 %}<tr>{% endif %}
+            <td><img src="{{ image }}" width="165"></td>
+            {% if loop.index0 % 3 == 2 or loop.last %}</tr>{% endif %}
+          {% endfor %}
+        </table>
+    </td></tr></table>
+  {% endif %}
+</body>
+</html>

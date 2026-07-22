@@ -1,1 +1,12 @@
 /Resources
+/.venv
+/.pytest_cache
+/.ruff_cache
+/build
+/dist
+/output
+/*.spec
+__pycache__/
+*.py[cod]
+*.egg-info/
+.project2pdf-cache/
