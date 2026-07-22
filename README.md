@@ -39,7 +39,7 @@ You can also launch it with:
 4. Choose the light (sun) or dark (moon) PDF theme from the top-right switch.
 5. Select **Generate this PDF** or **Generate all PDFs**.
 
-Related files in a dropped folder are treated as one project. Existing PDFs are inspected for clickable source and license links. 3MF packages are inspected for Bambu/3MF metadata, embedded photographs, plate previews, model names, and slicer settings. STL files provide geometry and dimensions; on Windows, Project2PDF also checks the `Zone.Identifier` download stream for the original referrer and download URL.
+When a dropped folder contains supported files in multiple nested directories, Project2PDF asks whether to create one combined project or split the contents. Split mode provides a file-by-file assignment table: choose an existing PDF group, type a new group name, or exclude a file. Existing PDFs are inspected for clickable source and license links. 3MF packages are inspected for Bambu/3MF metadata, embedded photographs, plate previews, model names, and slicer settings. STL files provide geometry and dimensions; on Windows, Project2PDF also checks the `Zone.Identifier` download stream for the original referrer and download URL.
 
 ## Command line
 

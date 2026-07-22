@@ -13,10 +13,13 @@ from PySide6.QtWidgets import (
     QAbstractButton,
     QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -32,12 +35,14 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QStatusBar,
+    QTableWidget,
+    QTableWidgetItem,
     QToolBar,
     QVBoxLayout,
     QWidget,
 )
 
-from .ingest import analyze_inputs
+from .ingest import SUPPORTED_FILES, InputGroup, analyze_inputs
 from .models import ProjectRecord, ProvenanceCandidate
 from .pdf import default_output_path, generate_pdf
 from .sites import CachedWebClient, enrich_records
@@ -61,6 +66,9 @@ QListWidget { background: #11161d; border: 1px solid #29313c; border-radius: 8px
 QListWidget::item { padding: 11px 9px; border-radius: 6px; margin: 2px; }
 QListWidget::item:selected { background: #313846; color: white; }
 QListWidget::item:hover { background: #222a35; }
+QTableWidget { background: #11161d; border: 1px solid #29313c; gridline-color: #29313c; }
+QTableWidget::item { padding: 6px; }
+QHeaderView::section { background: #202732; color: #dfe5ed; border: 0; border-right: 1px solid #343d49; padding: 8px; font-weight: 700; }
 QLineEdit, QPlainTextEdit, QComboBox { background: #171d25; border: 1px solid #313a47; border-radius: 7px; padding: 8px; selection-background-color: #f06035; }
 QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus { border-color: #f06035; }
 QComboBox::drop-down { border: 0; width: 28px; }
@@ -166,13 +174,86 @@ class PdfThemeToggle(QAbstractButton):
         painter.end()
 
 
+class FolderAssignmentDialog(QDialog):
+    IGNORE_LABEL = "Do not include"
+
+    def __init__(self, root: Path, files: list[Path], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.root = root
+        self.files = files
+        self.setWindowTitle("Assign folder contents to PDFs")
+        self.resize(820, 560)
+
+        layout = QVBoxLayout(self)
+        instructions = QLabel(
+            "Choose which PDF each file belongs to. Select an existing group, type a new PDF name, "
+            "or choose Do not include. Files with the same group name become one project."
+        )
+        instructions.setWordWrap(True)
+        instructions.setObjectName("Subtle")
+        layout.addWidget(instructions)
+
+        self.table = QTableWidget(len(files), 2)
+        self.table.setHorizontalHeaderLabels(["Project part or file", "PDF group"])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+
+        default_groups = unique_strings(self.suggested_group(root, file) for file in files)
+        group_choices = [*default_groups, self.IGNORE_LABEL]
+        self.group_editors: list[QComboBox] = []
+        for row, file in enumerate(files):
+            relative = file.relative_to(root)
+            file_item = QTableWidgetItem(str(relative))
+            file_item.setToolTip(str(file))
+            file_item.setFlags(file_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 0, file_item)
+
+            group_editor = QComboBox()
+            group_editor.setEditable(True)
+            group_editor.addItems(group_choices)
+            group_editor.setCurrentText(self.suggested_group(root, file))
+            group_editor.setMinimumWidth(240)
+            self.table.setCellWidget(row, 1, group_editor)
+            self.group_editors.append(group_editor)
+        layout.addWidget(self.table, 1)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Import groups")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @staticmethod
+    def suggested_group(root: Path, file: Path) -> str:
+        relative_parent = file.relative_to(root).parent
+        if relative_parent == Path("."):
+            return root.name
+        return " / ".join(relative_parent.parts)
+
+    def input_groups(self) -> list[InputGroup]:
+        grouped: dict[str, list[Path]] = {}
+        for file, editor in zip(self.files, self.group_editors, strict=True):
+            group_name = editor.currentText().strip()
+            if not group_name or group_name == self.IGNORE_LABEL:
+                continue
+            grouped.setdefault(group_name, []).append(file)
+        return [
+            InputGroup(root=self.root, files=files, title=group_name)
+            for group_name, files in grouped.items()
+        ]
+
+
 class WorkerSignals(QObject):
     finished = Signal(object)
     failed = Signal(str)
 
 
 class AnalysisWorker(QRunnable):
-    def __init__(self, inputs: list[str], cache_dir: Path) -> None:
+    def __init__(self, inputs: list[str | InputGroup], cache_dir: Path) -> None:
         super().__init__()
         self.inputs = inputs
         self.cache_dir = cache_dir
@@ -499,13 +580,69 @@ class MainWindow(QMainWindow):
     def add_inputs(self, inputs: list[str]) -> None:
         if not inputs:
             return
+        prepared_inputs: list[str | InputGroup] = []
+        for value in inputs:
+            path = Path(value).expanduser()
+            if path.is_dir():
+                folder_inputs = self._prepare_folder_input(path.resolve())
+                if folder_inputs is None:
+                    continue
+                prepared_inputs.extend(folder_inputs)
+            else:
+                prepared_inputs.append(value)
+        if not prepared_inputs:
+            return
         self.progress.setVisible(True)
         self.drop_zone.setEnabled(False)
-        self.statusBar().showMessage(f"Analyzing {len(inputs)} input(s)…")
-        worker = AnalysisWorker(inputs, self.cache_dir)
+        self.statusBar().showMessage(f"Analyzing {len(prepared_inputs)} project group(s)…")
+        worker = AnalysisWorker(prepared_inputs, self.cache_dir)
         worker.signals.finished.connect(self.analysis_finished)
         worker.signals.failed.connect(self.analysis_failed)
         self.thread_pool.start(worker)
+
+    def _prepare_folder_input(self, root: Path) -> list[str | InputGroup] | None:
+        files = sorted(
+            file
+            for file in root.rglob("*")
+            if file.is_file() and file.suffix.lower() in SUPPORTED_FILES
+        )
+        if not files:
+            return [str(root)]
+        candidate_areas = unique_strings(
+            FolderAssignmentDialog.suggested_group(root, file) for file in files
+        )
+        if len(candidate_areas) < 2:
+            return [str(root)]
+
+        prompt = QMessageBox(self)
+        prompt.setWindowTitle("Multiple project groups found")
+        prompt.setIcon(QMessageBox.Icon.Question)
+        prompt.setText(
+            f"{root.name} contains {len(files)} supported files across "
+            f"{len(candidate_areas)} folder areas."
+        )
+        prompt.setInformativeText(
+            "Create one combined PDF project, or split the contents and choose which parts belong to each PDF?"
+        )
+        one_pdf = prompt.addButton("One PDF", QMessageBox.ButtonRole.AcceptRole)
+        split_pdf = prompt.addButton("Split / assign…", QMessageBox.ButtonRole.ActionRole)
+        prompt.addButton(QMessageBox.StandardButton.Cancel)
+        prompt.setDefaultButton(one_pdf)
+        prompt.exec()
+
+        if prompt.clickedButton() == one_pdf:
+            return [str(root)]
+        if prompt.clickedButton() != split_pdf:
+            return None
+
+        assignment = FolderAssignmentDialog(root, files, self)
+        if assignment.exec() != QDialog.DialogCode.Accepted:
+            return None
+        groups = assignment.input_groups()
+        if not groups:
+            QMessageBox.warning(self, "Nothing assigned", "Assign at least one file to a PDF group.")
+            return None
+        return groups
 
     @Slot(object)
     def analysis_finished(self, records: object) -> None:

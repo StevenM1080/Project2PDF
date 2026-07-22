@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import re
 from pathlib import Path
 from urllib.parse import urlparse
@@ -18,6 +19,13 @@ from .util import clean_text, site_for_url, slug_title, unique_strings
 
 
 SUPPORTED_FILES = {".3mf", ".stl", ".obj", ".step", ".stp", ".pdf", ".url", ".jpg", ".jpeg", ".png", ".webp"}
+
+
+@dataclass(slots=True)
+class InputGroup:
+    root: Path
+    files: list[Path]
+    title: str
 
 
 def _collect_files(path: Path) -> list[Path]:
@@ -51,11 +59,27 @@ def _candidate_confidence(url: str, base: float) -> float:
     return base
 
 
-def analyze_path(path: Path) -> ProjectRecord:
+def analyze_path(
+    path: Path,
+    files_override: list[Path] | None = None,
+    title_override: str = "",
+) -> ProjectRecord:
     path = path.expanduser().resolve()
     root = path if path.is_dir() else path.parent
-    files = _collect_files(path)
-    record = ProjectRecord(input_root=root, source_files=files, title=slug_title(root.name))
+    files = (
+        _collect_files(path)
+        if files_override is None
+        else sorted(
+            file.expanduser().resolve()
+            for file in files_override
+            if file.is_file() and file.suffix.lower() in SUPPORTED_FILES
+        )
+    )
+    record = ProjectRecord(
+        input_root=root,
+        source_files=files,
+        title=title_override.strip() or slug_title(root.name),
+    )
     discovered_urls: list[str] = []
     candidates: list[ProvenanceCandidate] = []
 
@@ -210,9 +234,18 @@ def analyze_url(url: str) -> ProjectRecord:
     return record
 
 
-def analyze_inputs(inputs: list[str | Path]) -> list[ProjectRecord]:
+def analyze_inputs(inputs: list[str | Path | InputGroup]) -> list[ProjectRecord]:
     records: list[ProjectRecord] = []
     for value in inputs:
+        if isinstance(value, InputGroup):
+            records.append(
+                analyze_path(
+                    value.root,
+                    files_override=value.files,
+                    title_override=value.title,
+                )
+            )
+            continue
         text = str(value).strip()
         if re.match(r"^https?://", text, re.I):
             records.append(analyze_url(text))
