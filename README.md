@@ -71,5 +71,5 @@ project2pdf-gui
 ### Tests
 
 ```powershell
-.\.venv\Scripts\pytest.exe
+pytest
 ```
