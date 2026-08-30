@@ -11,6 +11,17 @@ from project2pdf.models import ProjectRecord
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
+def test_source_actions_are_grouped_with_url_controls(qtbot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    assert window.fetch_url_button.text() == "Fetch"
+    assert window.open_source_button.text() == "Source"
+    assert window.fetch_url_button.objectName() == "Primary"
+    assert window.open_source_button.objectName() == "Primary"
+    assert window.fetch_url_button.parentWidget() is window.open_source_button.parentWidget()
+
+
 def test_multiline_editor_grows_without_internal_scrollbars(qtbot) -> None:
     editor = AutoGrowingPlainTextEdit(minimum_lines=2)
     editor.resize(360, editor.height())

@@ -34,7 +34,7 @@ You can also launch it with:
 ## Using the application
 
 1. Drop a file, folder, or model-page link onto the drop area.
-2. Review the detected source and confidence evidence. If no source is found, paste the original model-page URL into **Original URL** and select **Fetch from URL** to use it as the metadata seed.
+2. Review the detected source and confidence evidence. If no source is found, paste the original model-page URL into **Original URL** and select **Fetch** to use it as the metadata seed.
 3. Check the image preview and correct or expand the title, creator, description, print instructions, tags, or license if needed. Images found in the dropped folder are kept and prioritized ahead of website images in the PDF.
 4. Choose the light (sun) or dark (moon) PDF theme from the top-right switch.
 5. Select **Generate this PDF** or **Generate all PDFs**.
