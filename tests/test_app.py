@@ -2,11 +2,80 @@ from __future__ import annotations
 
 import os
 
-from project2pdf.app import FolderAssignmentDialog, MainWindow
+from PySide6.QtCore import Qt
+
+from project2pdf.app import AutoGrowingPlainTextEdit, FolderAssignmentDialog, MainWindow
 from project2pdf.models import ProjectRecord
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
+def test_multiline_editor_grows_without_internal_scrollbars(qtbot) -> None:
+    editor = AutoGrowingPlainTextEdit(minimum_lines=2)
+    editor.resize(360, editor.height())
+    qtbot.addWidget(editor)
+    editor.show()
+    initial_height = editor.height()
+
+    editor.setPlainText("\n".join(f"A complete line of project details {number}" for number in range(12)))
+
+    qtbot.waitUntil(lambda: editor.height() > initial_height)
+    assert editor.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert editor.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert editor.verticalScrollBar().maximum() == 0
+
+
+def test_reset_fields_keeps_imported_project_assets(qtbot, tmp_path) -> None:
+    model_file = tmp_path / "part.stl"
+    record = ProjectRecord(
+        input_root=tmp_path,
+        source_files=[model_file],
+        title="Edited title",
+        creator="Creator",
+        creator_url="https://example.com/creator",
+        source_url="https://example.com/model",
+        discovery_url="https://example.com/search",
+        site="Example",
+        confidence=0.9,
+        evidence=["Found in metadata"],
+        description="Description",
+        print_instructions="Print slowly",
+        license_name="CC BY",
+        license_url="https://example.com/license",
+        published="2025",
+        updated="2026",
+        category="Tools",
+        tags=["useful"],
+        model_files=["part.stl"],
+        dimensions_mm=(10.0, 20.0, 30.0),
+        print_settings={"layer_height": "0.2"},
+        images=[str(tmp_path / "photo.png")],
+        embedded_images=[b"preview"],
+        candidates=[],
+        warnings=["Keep this warning"],
+        raw_metadata={"keep": True},
+    )
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.analysis_finished([record])
+
+    window.reset_current_fields()
+
+    assert record.title == ""
+    assert record.source_url == ""
+    assert record.creator == ""
+    assert record.description == ""
+    assert record.tags == []
+    assert record.source_files == [model_file]
+    assert record.model_files == ["part.stl"]
+    assert record.dimensions_mm == (10.0, 20.0, 30.0)
+    assert record.print_settings == {"layer_height": "0.2"}
+    assert record.images == [str(tmp_path / "photo.png")]
+    assert record.embedded_images == [b"preview"]
+    assert record.warnings == ["Keep this warning"]
+    assert record.raw_metadata == {"keep": True}
+    assert "part.stl" in window.file_summary.text()
 
 
 def test_remove_project_deletes_only_requested_item_and_selects_next(qtbot) -> None:

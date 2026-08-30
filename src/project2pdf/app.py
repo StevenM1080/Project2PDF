@@ -174,6 +174,41 @@ class PdfThemeToggle(QAbstractButton):
         painter.end()
 
 
+class AutoGrowingPlainTextEdit(QPlainTextEdit):
+    """A wrapped text editor whose height follows its document content."""
+
+    def __init__(self, minimum_lines: int = 3, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._minimum_lines = max(1, minimum_lines)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.document().documentLayout().documentSizeChanged.connect(self._update_height)
+        self.textChanged.connect(self._update_height)
+        self._update_height()
+
+    def _update_height(self, *_args) -> None:
+        document = self.document()
+        layout = document.documentLayout()
+        document_height = 0.0
+        block = document.firstBlock()
+        while block.isValid():
+            document_height += layout.blockBoundingRect(block).height()
+            block = block.next()
+        document_height += document.documentMargin() * 2
+        margins = self.contentsMargins()
+        chrome_height = margins.top() + margins.bottom() + (self.frameWidth() * 2) + 18
+        minimum_height = (self.fontMetrics().lineSpacing() * self._minimum_lines) + chrome_height
+        required_height = max(minimum_height, int(document_height + chrome_height + 0.999))
+        if self.height() != required_height:
+            self.setFixedHeight(required_height)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._update_height()
+
+
 class FolderAssignmentDialog(QDialog):
     IGNORE_LABEL = "Do not include"
 
@@ -334,7 +369,12 @@ class MainWindow(QMainWindow):
         add_folder.triggered.connect(self.choose_folder)
         toolbar.addAction(add_folder)
         toolbar.addSeparator()
-        clear = QAction("Clear", self)
+        self.reset_fields_action = QAction("Reset fields", self)
+        self.reset_fields_action.setToolTip("Clear the selected project's fields without removing its files")
+        self.reset_fields_action.setEnabled(False)
+        self.reset_fields_action.triggered.connect(self.confirm_reset_current_fields)
+        toolbar.addAction(self.reset_fields_action)
+        clear = QAction("Clear list", self)
         clear.triggered.connect(self.clear_projects)
         toolbar.addAction(clear)
         toolbar.addSeparator()
@@ -495,10 +535,8 @@ class MainWindow(QMainWindow):
         details_form = QFormLayout()
         details_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         self.title_edit = QLineEdit()
-        self.description = QPlainTextEdit()
-        self.description.setMinimumHeight(150)
-        self.instructions = QPlainTextEdit()
-        self.instructions.setMinimumHeight(130)
+        self.description = AutoGrowingPlainTextEdit()
+        self.instructions = AutoGrowingPlainTextEdit()
         self.tags = QLineEdit()
         details_form.addRow("Title", self.title_edit)
         details_form.addRow("Summary", self.description)
@@ -677,6 +715,7 @@ class MainWindow(QMainWindow):
         if self.current_index >= 0:
             self.commit_editor()
         self.current_index = index
+        self.reset_fields_action.setEnabled(0 <= index < len(self.records))
         if index < 0 or index >= len(self.records):
             self.stack.setCurrentIndex(0)
             return
@@ -834,8 +873,53 @@ class MainWindow(QMainWindow):
         self.records.clear()
         self.current_index = -1
         self.project_list.clear()
+        self.reset_fields_action.setEnabled(False)
         self.stack.setCurrentIndex(0)
         self.statusBar().showMessage("Cleared")
+
+    @Slot()
+    def confirm_reset_current_fields(self) -> None:
+        if self.current_index < 0 or self.current_index >= len(self.records):
+            return
+        project_name = self.records[self.current_index].display_name
+        answer = QMessageBox.question(
+            self,
+            "Reset project fields?",
+            f'Clear the editable information for "{project_name}"?\n\n'
+            "Imported files, model details, images, and warnings will be kept.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.reset_current_fields()
+
+    def reset_current_fields(self) -> None:
+        if self.current_index < 0 or self.current_index >= len(self.records):
+            return
+        record = self.records[self.current_index]
+        record.source_url = ""
+        record.discovery_url = ""
+        record.site = ""
+        record.confidence = 0.0
+        record.evidence.clear()
+        record.creator = ""
+        record.creator_url = ""
+        record.license_name = ""
+        record.license_url = ""
+        record.title = ""
+        record.description = ""
+        record.print_instructions = ""
+        record.published = ""
+        record.updated = ""
+        record.category = ""
+        record.tags.clear()
+        record.candidates.clear()
+
+        item = self.project_list.item(self.current_index)
+        if item:
+            item.setText(self._list_text(record))
+        self.load_editor(record)
+        self.statusBar().showMessage("Reset fields; imported files were kept", 5000)
 
     @Slot(object)
     def show_project_context_menu(self, position: object) -> None:
@@ -863,6 +947,7 @@ class MainWindow(QMainWindow):
 
         if not self.records:
             self.current_index = -1
+            self.reset_fields_action.setEnabled(False)
             self.stack.setCurrentIndex(0)
         else:
             next_row = min(row, len(self.records) - 1)
