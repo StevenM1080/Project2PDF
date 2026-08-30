@@ -3,12 +3,26 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
 
 from project2pdf.app import AutoGrowingPlainTextEdit, FolderAssignmentDialog, MainWindow
 from project2pdf.models import ProjectRecord
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
+def test_theme_switch_updates_application_style(qtbot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.pdf_theme_changed(False)
+    assert window.pdf_theme == "light"
+    assert "#f4f6f9" in QApplication.instance().styleSheet()
+
+    window.pdf_theme_changed(True)
+    assert window.pdf_theme == "dark"
+    assert "#11151b" in QApplication.instance().styleSheet()
 
 
 def test_source_actions_are_grouped_with_url_controls(qtbot) -> None:

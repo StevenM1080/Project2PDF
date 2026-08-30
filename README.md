@@ -2,7 +2,7 @@
 
 Project2PDF turns downloaded 3D-print files, project folders, and model-page links into durable PDFs that retain the information needed months or years later: the original listing, creator, photographs, description, print guidance, model files, dimensions, slicer settings, and license.
 
-The desktop app uses a dark PySide6 interface and accepts drag-and-drop input from Explorer and web browsers.
+The desktop app uses a light/dark PySide6 interface and accepts drag-and-drop input from Explorer and web browsers.
 
 ## Supported sources
 
@@ -36,7 +36,7 @@ You can also launch it with:
 1. Drop a file, folder, or model-page link onto the drop area.
 2. Review the detected source and confidence evidence. If no source is found, paste the original model-page URL into **Original URL** and select **Fetch** to use it as the metadata seed.
 3. Check the image preview and correct or expand the title, creator, description, print instructions, tags, or license if needed. Images found in the dropped folder are kept and prioritized ahead of website images in the PDF.
-4. Choose the light (sun) or dark (moon) PDF theme from the top-right switch.
+4. Choose the light (sun) or dark (moon) app and PDF theme from the top-right switch.
 5. Select **Generate this PDF** or **Generate all PDFs**.
 
 When a dropped folder contains supported files in multiple nested directories, Project2PDF asks whether to create one combined project or split the contents. Split mode provides a file-by-file assignment table: choose an existing PDF group, type a new group name, or exclude a file. Existing PDFs are inspected for clickable source and license links. 3MF packages are inspected for Bambu/3MF metadata, embedded photographs, plate previews, model names, and slicer settings. STL files provide geometry and dimensions; on Windows, Project2PDF also checks the `Zone.Identifier` download stream for the original referrer and download URL.

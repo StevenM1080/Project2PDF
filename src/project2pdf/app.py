@@ -84,6 +84,41 @@ QSplitter::handle { background: #2b323d; width: 1px; }
 QToolTip { background: #252d38; color: white; border: 1px solid #3a4553; padding: 5px; }
 """
 
+LIGHT_APP_STYLE = """
+QWidget { background: #f4f6f9; color: #1f2937; font-family: "Segoe UI"; font-size: 10pt; }
+QMainWindow, QScrollArea, QScrollArea > QWidget > QWidget { background: #f4f6f9; }
+QToolBar { background: #ffffff; border: 0; border-bottom: 1px solid #d8dee8; padding: 7px; spacing: 6px; }
+QToolButton { background: transparent; border: 0; border-radius: 6px; padding: 7px 10px; color: #334155; }
+QToolButton:hover { background: #edf1f6; }
+QFrame#Sidebar { background: #e9eef5; border-right: 1px solid #ccd5e0; }
+QFrame#DropZone { background: #f8fafc; border: 2px dashed #a8b5c4; border-radius: 12px; }
+QFrame#DropZone[dragActive="true"] { border-color: #f06035; background: #fff3ef; }
+QFrame#ImagePreview { background: #eef2f6; border: 1px solid #cbd5e1; border-radius: 9px; }
+QLabel#DropTitle { font-size: 15pt; font-weight: 650; }
+QLabel#DropHint, QLabel#Subtle { color: #68778a; }
+QLabel#Section { font-size: 10pt; font-weight: 700; color: #526174; text-transform: uppercase; }
+QListWidget { background: #ffffff; border: 1px solid #c9d2dd; border-radius: 8px; padding: 4px; outline: none; }
+QListWidget::item { padding: 11px 9px; border-radius: 6px; margin: 2px; }
+QListWidget::item:selected { background: #d6e0ed; color: #1f2937; }
+QListWidget::item:hover { background: #edf2f7; }
+QTableWidget { background: #ffffff; border: 1px solid #c9d2dd; gridline-color: #d5dce5; }
+QTableWidget::item { padding: 6px; }
+QHeaderView::section { background: #e6ebf2; color: #334155; border: 0; border-right: 1px solid #d2dae5; padding: 8px; font-weight: 700; }
+QLineEdit, QPlainTextEdit, QComboBox { background: #ffffff; border: 1px solid #c4cfdb; border-radius: 7px; padding: 8px; selection-background-color: #f06035; }
+QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus { border-color: #f06035; }
+QComboBox::drop-down { border: 0; width: 28px; }
+QPushButton { background: #e6ebf2; border: 1px solid #c4ceda; border-radius: 7px; padding: 9px 14px; font-weight: 600; }
+QPushButton:hover { background: #dce5ee; }
+QPushButton#Primary { background: #f06035; border-color: #f06035; color: white; }
+QPushButton#Primary:hover { background: #ff7043; }
+QPushButton:disabled { color: #97a2af; background: #e9edf2; border-color: #d7dee7; }
+QStatusBar { background: #ffffff; color: #68778a; border-top: 1px solid #d8dee8; }
+QProgressBar { background: #ffffff; border: 1px solid #c4cfdb; border-radius: 5px; text-align: center; }
+QProgressBar::chunk { background: #f06035; border-radius: 4px; }
+QSplitter::handle { background: #ccd5e0; width: 1px; }
+QToolTip { background: #ffffff; color: #1f2937; border: 1px solid #c4cfdb; padding: 5px; }
+"""
+
 
 class DropZone(QFrame):
     inputs_dropped = Signal(list)
@@ -156,8 +191,8 @@ class PdfThemeToggle(QAbstractButton):
         self.setCheckable(True)
         self.setFixedSize(48, 26)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Switch between light and dark PDF output")
-        self.setAccessibleName("Dark PDF theme")
+        self.setToolTip("Switch between the light and dark app theme")
+        self.setAccessibleName("Dark theme")
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         del event
@@ -348,11 +383,13 @@ class MainWindow(QMainWindow):
         self.settings = QSettings("Project2PDF", "Project2PDF")
         saved_pdf_theme = str(self.settings.value("pdf_theme", "light")).casefold()
         self.pdf_theme = saved_pdf_theme if saved_pdf_theme in {"light", "dark"} else "light"
+        self._confidence_color = "#334155"
         self.records: list[ProjectRecord] = []
         self.current_index = -1
         self.thread_pool = QThreadPool.globalInstance()
         cache_value = self.settings.value("cache_dir", "")
         self.cache_dir = Path(str(cache_value)) if cache_value else Path.home() / ".cache" / "Project2PDF"
+        self._apply_theme(self.pdf_theme)
         self._build_ui()
         self._restore_state()
 
@@ -384,16 +421,16 @@ class MainWindow(QMainWindow):
         theme_layout = QHBoxLayout(theme_widget)
         theme_layout.setContentsMargins(8, 0, 5, 0)
         theme_layout.setSpacing(7)
-        theme_label = QLabel("PDF")
+        theme_label = QLabel("Theme")
         theme_label.setObjectName("Subtle")
         self.light_theme_label = QLabel("☀")
-        self.light_theme_label.setToolTip("Light PDF")
+        self.light_theme_label.setToolTip("Light theme")
         self.light_theme_label.setStyleSheet("font-size: 14pt;")
         self.pdf_theme_toggle = PdfThemeToggle()
         self.pdf_theme_toggle.setChecked(self.pdf_theme == "dark")
         self.pdf_theme_toggle.toggled.connect(self.pdf_theme_changed)
         self.dark_theme_label = QLabel("☾")
-        self.dark_theme_label.setToolTip("Dark PDF")
+        self.dark_theme_label.setToolTip("Dark theme")
         self.dark_theme_label.setStyleSheet("font-size: 16pt;")
         theme_layout.addWidget(theme_label)
         theme_layout.addWidget(self.light_theme_label)
@@ -581,12 +618,26 @@ class MainWindow(QMainWindow):
         self.settings.setValue("geometry", self.saveGeometry())
         super().closeEvent(event)
 
+    def _apply_theme(self, theme: str) -> None:
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(LIGHT_APP_STYLE if theme == "light" else APP_STYLE)
+        if hasattr(self, "confidence"):
+            self._update_confidence_style()
+        if hasattr(self, "image_preview"):
+            image_background = "#ffffff" if theme == "light" else "#0f1318"
+            image_text = "#68778a" if theme == "light" else "#7f8996"
+            self.image_preview.setStyleSheet(
+                f"background: {image_background}; border-radius: 6px; color: {image_text};"
+            )
+
     @Slot(bool)
     def pdf_theme_changed(self, dark: bool) -> None:
         self.pdf_theme = "dark" if dark else "light"
         self.settings.setValue("pdf_theme", self.pdf_theme)
+        self._apply_theme(self.pdf_theme)
         self._update_pdf_theme_labels()
-        self.statusBar().showMessage(f"PDF theme: {self.pdf_theme.title()}", 3000)
+        self.statusBar().showMessage(f"Theme: {self.pdf_theme.title()}", 3000)
 
     def _update_pdf_theme_labels(self) -> None:
         active = "#ffb36b"
@@ -596,6 +647,13 @@ class MainWindow(QMainWindow):
         )
         self.dark_theme_label.setStyleSheet(
             f"font-size: 16pt; color: {active if self.pdf_theme == 'dark' else inactive};"
+        )
+
+    def _update_confidence_style(self) -> None:
+        background = "#e2e8f0" if self.pdf_theme == "light" else "#252d38"
+        self.confidence.setStyleSheet(
+            f"padding: 6px 10px; border-radius: 10px; background: {background}; "
+            f"color: {self._confidence_color};"
         )
 
     @Slot()
@@ -728,7 +786,8 @@ class MainWindow(QMainWindow):
         label = "High confidence" if record.confidence >= 0.9 else "Medium confidence" if record.confidence >= 0.65 else "Needs review"
         color = "#5fc78b" if record.confidence >= 0.9 else "#f3b95f" if record.confidence >= 0.65 else "#ff7979"
         self.confidence.setText(label)
-        self.confidence.setStyleSheet(f"padding: 6px 10px; border-radius: 10px; background: #252d38; color: {color};")
+        self._confidence_color = color
+        self._update_confidence_style()
         self.evidence.setText(" • ".join(record.evidence) or "No source evidence yet")
         self.candidate_combo.blockSignals(True)
         self.candidate_combo.clear()
