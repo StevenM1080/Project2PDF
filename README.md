@@ -66,9 +66,9 @@ python -m venv .venv
 python -m pip install -e ".[dev]"
 
 project2pdf-gui
+```
 
-
-## Tests
+### Tests
 
 ```powershell
 .\.venv\Scripts\pytest.exe
